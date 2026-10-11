@@ -612,7 +612,7 @@ function isNameConfirmationQuestion(text){
  return /からはじまる？|名前に「.*」が含まれる|名前に「.*」が入ってる？/.test(text);
 }
 function chooseQuestion(allowRepeat=false){
- let best=null,bestScore=-1;
+ const scoredQuestions=[];
  const answeredCount=answers.filter(a=>a.a!=='maybe').length;
  const plausible=plausibleCandidates();
  const nameQuestionsAsked=answers.filter(a=>isNameConfirmationQuestion(questionDefs[a.i]?.[0]||'')).length;
@@ -666,9 +666,18 @@ function chooseQuestion(allowRepeat=false){
   }
   if(/「(JR|阪急|阪神|京阪|近鉄|南海|大阪メトロ|大阪モノレール|北大阪急行|泉北高速鉄道|水間鉄道|阪堺電車|ニュートラム).*」が通っている？/.test(text))score+=0.08;
   if(answeredCount>=9&&score<0.04)continue;
-  if(score>bestScore){bestScore=score;best={i,q};}
+  scoredQuestions.push({i,q,score});
  }
- return best;
+ if(!scoredQuestions.length)return null;
+ // 絞り込み効果が最も高い質問に近いものだけを候補にし、その中からランダムに選ぶ。
+ // スコアが高い質問ほど選ばれやすくして、精度を保ちながら質問順に変化をつける。
+ const bestScore=Math.max(...scoredQuestions.map(item=>item.score));
+ const nearBest=scoredQuestions.filter(item=>item.score>=bestScore-0.06);
+ const weighted=nearBest.map(item=>({...item,weight:Math.max(0.01,item.score-(bestScore-0.06)+0.01)}));
+ const totalWeight=weighted.reduce((sum,item)=>sum+item.weight,0);
+ let pick=Math.random()*totalWeight;
+ for(const item of weighted){pick-=item.weight;if(pick<=0)return item;}
+ return weighted[weighted.length-1];
 }
 // 過去の候補リストで正解を永久除外しない。毎回74自治体すべてを再採点する。
 function answer(i,a){
