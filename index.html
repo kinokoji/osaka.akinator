@@ -186,7 +186,7 @@ let candidates=[...rows],answers=[],asked=new Set(),rejectedGuesses=new Set(),cu
 function entropy(n){return n?Math.log2(n):0}
 function safeQuestionValue(q,x){try{const value=q[1](x);return value===true?true:value===false?false:null}catch(e){return null}}
 function chooseQuestion(){let best=null,bestScore=-1;questionDefs.forEach((q,i)=>{if(asked.has(i))return;let known=candidates.filter(x=>safeQuestionValue(q,x)!==null),yes=known.filter(x=>safeQuestionValue(q,x)===true).length,no=known.length-yes;if(!yes||!no)return;let balance=1-Math.abs(yes-no)/known.length;let coverage=known.length/Math.max(1,candidates.length);let score=balance*coverage;if(score>bestScore){bestScore=score;best={i,q}}});return best}
-function render(){current=chooseQuestion();if(!current)current=chooseQuestion(true);if(!current){renderGuess();return}let q=current.q[0],idx=current.i;game.innerHTML=`<div class="progress-row"><span>質問 ${answers.length+1}</span><span>候補 ${plausibleCandidates().length} 件</span></div><div class="track"><div id="bar" style="width:${Math.min(100,answers.length/9*100)}%"></div></div><div class="qnum">QUESTION ${String(answers.length+1).padStart(2,'0')}</div><h2>${q}</h2><p class="hint">直感で選んでOK。知らない・判断できない場合は「わからん」を押してな。予想が外れたときも、別の質問で続けて絞り直せるで。</p><div class="answers"><button class="answer primary" data-a="yes">はい！</button><button class="answer" data-a="no">ちゃうと思う</button><button class="answer wide" data-a="maybe">わからん・どっちとも言えん</button></div><div class="controls"><button class="textbtn" id="undo" ${answers.length?'':'disabled'}>← ひとつ戻る</button><button class="textbtn" id="restart">最初からやり直す ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button><button class="textbtn" id="tell-answer">正解を教えて記録</button></div>`;game.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>answer(idx,b.dataset.a));document.getElementById('undo').onclick=undo;document.getElementById('restart').onclick=restart;document.getElementById('feedback-archive').onclick=renderFeedbackArchive;document.getElementById('tell-answer').onclick=renderCorrection}
+function render(){current=chooseQuestion();if(!current)current=chooseQuestion(true);if(!current){renderGuess();return}let q=current.q[0],idx=current.i;game.innerHTML=`<div class="progress-row"><span>質問 ${answers.length+1}</span><span>有力候補 ${plausibleCandidates().length} 件</span></div><div class="track"><div id="bar" style="width:${Math.min(100,answers.length/8*100)}%"></div></div><div class="qnum">QUESTION ${String(answers.length+1).padStart(2,'0')}</div><h2>${q}</h2><p class="hint">直感で選んでOK。知らない・判断できない場合は「わからん」を押してな。予想が外れたときも、別の質問で続けて絞り直せるで。</p><div class="answers"><button class="answer primary" data-a="yes">はい！</button><button class="answer" data-a="no">ちゃうと思う</button><button class="answer wide" data-a="maybe">わからん・どっちとも言えん</button></div><div class="controls"><button class="textbtn" id="undo" ${answers.length?'':'disabled'}>← ひとつ戻る</button><button class="textbtn" id="restart">最初からやり直す ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button><button class="textbtn" id="tell-answer">正解を教えて記録</button></div>`;game.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>answer(idx,b.dataset.a));document.getElementById('undo').onclick=undo;document.getElementById('restart').onclick=restart;document.getElementById('feedback-archive').onclick=renderFeedbackArchive;document.getElementById('tell-answer').onclick=renderCorrection}
 function mismatchCount(x){let n=0;for(const a of answers){if(a.a==='maybe')continue;const value=safeQuestionValue(questionDefs[a.i],x);if(value!==null&&value!==(a.a==='yes'))n++;}return n}
 function answer(i,a){asked.add(i);answers.push({i,a,prev:[...candidates]});if(a!=='maybe'){let q=questionDefs[i];const pool=candidates.length?candidates:rows;candidates=pool.filter(x=>{let mismatches=0;for(const ans of answers){if(ans.a==='maybe')continue;const value=safeQuestionValue(questionDefs[ans.i],x);if(value!==null&&value!==(ans.a==='yes'))mismatches++;}return mismatches<=1;});if(!candidates.length)candidates=[...rows].sort((x,y)=>mismatchCount(x)-mismatchCount(y)).slice(0,24);}render()}
 function renderGuess(){let sorted=[...candidates].sort((x,y)=>mismatchCount(x)-mismatchCount(y));let first=sorted[0];currentGuessName=first?.name||'';game.innerHTML=`<div class="result-kicker">MY GUESS</div><h2>もしかして……</h2><div class="result-name">${first?first.name:'うーん、迷った！'}</div><p class="result-sub">${first?(first.type==='区'?first.region+'の区':first.region+'エリアの'+first.type):'回答をもう一度見直してみてな。'}${first&&mismatchCount(first)>0?'（回答と食い違う特徴が1つあるから、誤回答の可能性も考えてるで）':''}</p><div class="pills"><span class="pill">残り候補 ${candidates.length} 件</span><span class="pill">質問 ${answers.length} 回</span></div><div class="result-actions"><button class="answer primary" id="correct">正解！🎉</button><button class="answer" id="wrong">ちゃうで！</button></div><div class="list-wrap"><details><summary>残りの候補を見る（${candidates.length}件）</summary><div class="candidates">${sorted.map(x=>`<span class="candidate">${x.name}</span>`).join('')}</div></details></div><div class="controls"><button class="textbtn" id="undo">← ひとつ戻る</button><button class="textbtn" id="restart">もう一回遊ぶ ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button></div>`;document.getElementById('correct').onclick=()=>{game.innerHTML=`<div class="result-kicker">NICE GUESS!</div><div class="result-name">当たった！🎉</div><p class="result-sub">大阪の地元力、なかなかやな。${first?first.name:''}で正解！</p><button class="answer primary wide" id="again">もう一回遊ぶ ↻</button>`;document.getElementById('again').onclick=restart};document.getElementById('wrong').onclick=()=>{if(first)rejectedGuesses.add(first.name);asked.clear();render();};document.getElementById('undo').onclick=undo;document.getElementById('restart').onclick=restart;document.getElementById('feedback-archive').onclick=renderFeedbackArchive}
@@ -604,18 +604,35 @@ function plausibleCandidates(){
  const ranked=[...rows].filter(x=>!rejectedGuesses.has(x.name)).sort((a,b)=>candidateWeight(b)-candidateWeight(a)||mismatchCount(a)-mismatchCount(b));
  if(!ranked.length)return [];
  const best=mismatchCount(ranked[0]);
- const tolerance=Math.max(2,Math.min(4,Math.floor(answers.filter(a=>a.a!=='maybe').length/4)+2));
- const plausible=ranked.filter(x=>mismatchCount(x)<=best+tolerance);
- return plausible.length?plausible:ranked.slice(0,12);
+ // 候補を早めにしぼる。登録データの誤差に備えて、不一致は最大1問ぶんだけ許容する。
+ const plausible=ranked.filter(x=>mismatchCount(x)<=best+1);
+ return plausible.length?plausible:ranked.slice(0,4);
+}
+function isNameConfirmationQuestion(text){
+ return /からはじまる？|名前に「.*」が含まれる|名前に「.*」が入ってる？/.test(text);
 }
 function chooseQuestion(allowRepeat=false){
  let best=null,bestScore=-1;
  const answeredCount=answers.filter(a=>a.a!=='maybe').length;
+ const plausible=plausibleCandidates();
+ const nameQuestionsAsked=answers.filter(a=>isNameConfirmationQuestion(questionDefs[a.i]?.[0]||'')).length;
+ // 有力候補が4件以下なら、最後は名前系を最大2問だけ使って決める。
+ const finalNamePhase=nameQuestionsAsked>0||plausible.length<=4;
+ if(finalNamePhase&&nameQuestionsAsked>=2)return null;
  for(let i=0;i<questionDefs.length;i++){
   if(asked.has(i))continue;
   if(!allowRepeat&&answers.some(a=>a.i===i))continue;
   const q=questionDefs[i];
-  const activeRows=rows.filter(x=>!rejectedGuesses.has(x.name));
+  const text=q[0];
+  const specialtyPattern=/名産|名物|農産物|野菜|果物|魚介|海産物|郷土料理|ご当地グルメ|加工食品|工芸|地場産業|食べ物/;
+  const specialtyAsked=answers.filter(a=>specialtyPattern.test(questionDefs[a.i]?.[0]||'')).length;
+  // 名産系は最大3問まで。候補を減らす主役にはしない。
+  if(specialtyPattern.test(text)&&specialtyAsked>=3)continue;
+  const isNameConfirmation=isNameConfirmationQuestion(text);
+  if(finalNamePhase&&!isNameConfirmation)continue;
+  // 候補が4件より多い間は、文字・読みの質問を封印して地域特徴で絞る。
+  if(!finalNamePhase&&isNameConfirmation)continue;
+  const activeRows=plausible.length?plausible:rows.filter(x=>!rejectedGuesses.has(x.name));
   let yes=0,no=0,known=0;
   for(const x of activeRows){
    const v=safeQuestionValue(q,x);
@@ -628,13 +645,13 @@ function chooseQuestion(allowRepeat=false){
   const balance=1-Math.abs(yes-no)/known;
   const coverage=known/Math.max(1,activeRows.reduce((sum,x)=>sum+candidateWeight(x),0));
   let score=balance*coverage;
-  const text=q[0];
-  if(/鉄道|路線|「.*」が通っている|ニュートラム|阪急|阪神|南海|近鉄|京阪|JR|地下鉄|モノレール/.test(text))score+=0.20;
-  if(/名産|農産物|野菜|果物|魚介|海産物|郷土料理|ご当地グルメ|加工食品|工芸|地場産業/.test(text))score+=0.16;
+  if(/鉄道|路線|「.*」が通っている|ニュートラム|阪急|阪神|南海|近鉄|京阪|JR|地下鉄|モノレール/.test(text))score+=0.12;
+  if(specialtyPattern.test(text))score-=0.08;
+  if(isNameConfirmation)score+=0.15;
   if(/鉄道路線は3本以上/.test(text))score-=0.05;
   if(/一級河川/.test(text))score-=0.18;
   if(answeredCount>0&&/一級河川/.test(questionDefs[answers[answers.length-1]?.i]?.[0]||''))score-=0.12;
-  // 道路・高速道路の質問は補助情報扱いにし、鉄道・名産・地域特徴を先に尋ねる。
+  // 道路・高速道路の質問は補助情報扱いにし、頻度を抑える。
   const isRoadQuestion = roadNames.some(road=>text===`「${road}」が通っている？`) || /高速道路JCT|サービスエリア・パーキングエリア/.test(text);
   if(isRoadQuestion) {
     score -= 0.38;
@@ -645,9 +662,8 @@ function chooseQuestion(allowRepeat=false){
     if(recentRoads>=1)score-=0.22;
     if(recentRoads>=2)score-=0.35;
   }
-  // 近い候補同士を区別できる鉄道路線の質問を優先。ただし道路質問の頻度は抑える。
   if(/「(JR|阪急|阪神|京阪|近鉄|南海|大阪メトロ|大阪モノレール|北大阪急行|泉北高速鉄道|水間鉄道|阪堺電車|ニュートラム).*」が通っている？/.test(text))score+=0.08;
-  if(answeredCount>=8&&score<0.075)continue;
+  if(answeredCount>=9&&score<0.04)continue;
   if(score>bestScore){bestScore=score;best={i,q};}
  }
  return best;
