@@ -182,14 +182,14 @@ questionDefs.push(
 ['兵庫','京都','奈良','和歌山'].forEach(pref=>questionDefs.push([`他府県の「${pref}${pref==='京都'?'府':'県'}」と境界を接している？`,x=>profiles[x.name]?(profiles[x.name].pref||[]).includes(pref):null]));
 ['JR','阪急','阪神','京阪','近鉄','南海','地下鉄','大阪モノレール','北大阪急行','泉北高速','水間鉄道','ニュートラム'].forEach(rail=>questionDefs.push([`「${rail}」の路線が通っている？`,x=>profiles[x.name]?(profiles[x.name].rail||[]).includes(rail):null]));
 // 名所・名物を一件ずつ尋ねる質問は作らず、地理・交通・行政区分などの特徴で推理する。
-let candidates=[...rows],answers=[],asked=new Set(),current=null,currentGuessName='';const game=document.getElementById('game');
+let candidates=[...rows],answers=[],asked=new Set(),rejectedGuesses=new Set(),current=null,currentGuessName='';const game=document.getElementById('game');
 function entropy(n){return n?Math.log2(n):0}
 function safeQuestionValue(q,x){try{const value=q[1](x);return value===true?true:value===false?false:null}catch(e){return null}}
 function chooseQuestion(){let best=null,bestScore=-1;questionDefs.forEach((q,i)=>{if(asked.has(i))return;let known=candidates.filter(x=>safeQuestionValue(q,x)!==null),yes=known.filter(x=>safeQuestionValue(q,x)===true).length,no=known.length-yes;if(!yes||!no)return;let balance=1-Math.abs(yes-no)/known.length;let coverage=known.length/Math.max(1,candidates.length);let score=balance*coverage;if(score>bestScore){bestScore=score;best={i,q}}});return best}
-function render(){if(candidates.length<=1){renderGuess();return}current=chooseQuestion();if(!current){renderGuess();return}let q=current.q[0],idx=current.i;game.innerHTML=`<div class="progress-row"><span>質問 ${answers.length+1}</span><span>候補 ${candidates.length} 件</span></div><div class="track"><div id="bar" style="width:${Math.min(100,answers.length/9*100)}%"></div></div><div class="qnum">QUESTION ${String(answers.length+1).padStart(2,'0')}</div><h2>${q}</h2><p class="hint">直感で選んでOK。知らない・判断できない場合は「わからん」を押してな。</p><div class="answers"><button class="answer primary" data-a="yes">はい！</button><button class="answer" data-a="no">ちゃうと思う</button><button class="answer wide" data-a="maybe">わからん・どっちとも言えん</button></div><div class="controls"><button class="textbtn" id="undo" ${answers.length?'':'disabled'}>← ひとつ戻る</button><button class="textbtn" id="restart">最初からやり直す ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button></div>`;game.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>answer(idx,b.dataset.a));document.getElementById('undo').onclick=undo;document.getElementById('restart').onclick=restart;document.getElementById('feedback-archive').onclick=renderFeedbackArchive}
+function render(){current=chooseQuestion();if(!current)current=chooseQuestion(true);if(!current){renderGuess();return}let q=current.q[0],idx=current.i;game.innerHTML=`<div class="progress-row"><span>質問 ${answers.length+1}</span><span>候補 ${plausibleCandidates().length} 件</span></div><div class="track"><div id="bar" style="width:${Math.min(100,answers.length/9*100)}%"></div></div><div class="qnum">QUESTION ${String(answers.length+1).padStart(2,'0')}</div><h2>${q}</h2><p class="hint">直感で選んでOK。知らない・判断できない場合は「わからん」を押してな。予想が外れたときも、別の質問で続けて絞り直せるで。</p><div class="answers"><button class="answer primary" data-a="yes">はい！</button><button class="answer" data-a="no">ちゃうと思う</button><button class="answer wide" data-a="maybe">わからん・どっちとも言えん</button></div><div class="controls"><button class="textbtn" id="undo" ${answers.length?'':'disabled'}>← ひとつ戻る</button><button class="textbtn" id="restart">最初からやり直す ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button><button class="textbtn" id="tell-answer">正解を教えて記録</button></div>`;game.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>answer(idx,b.dataset.a));document.getElementById('undo').onclick=undo;document.getElementById('restart').onclick=restart;document.getElementById('feedback-archive').onclick=renderFeedbackArchive;document.getElementById('tell-answer').onclick=renderCorrection}
 function mismatchCount(x){let n=0;for(const a of answers){if(a.a==='maybe')continue;const value=safeQuestionValue(questionDefs[a.i],x);if(value!==null&&value!==(a.a==='yes'))n++;}return n}
 function answer(i,a){asked.add(i);answers.push({i,a,prev:[...candidates]});if(a!=='maybe'){let q=questionDefs[i];const pool=candidates.length?candidates:rows;candidates=pool.filter(x=>{let mismatches=0;for(const ans of answers){if(ans.a==='maybe')continue;const value=safeQuestionValue(questionDefs[ans.i],x);if(value!==null&&value!==(ans.a==='yes'))mismatches++;}return mismatches<=1;});if(!candidates.length)candidates=[...rows].sort((x,y)=>mismatchCount(x)-mismatchCount(y)).slice(0,24);}render()}
-function renderGuess(){let sorted=[...candidates].sort((x,y)=>mismatchCount(x)-mismatchCount(y));let first=sorted[0];currentGuessName=first?.name||'';game.innerHTML=`<div class="result-kicker">MY GUESS</div><h2>もしかして……</h2><div class="result-name">${first?first.name:'うーん、迷った！'}</div><p class="result-sub">${first?(first.type==='区'?first.region+'の区':first.region+'エリアの'+first.type):'回答をもう一度見直してみてな。'}${first&&mismatchCount(first)>0?'（回答と食い違う特徴が1つあるから、誤回答の可能性も考えてるで）':''}</p><div class="pills"><span class="pill">残り候補 ${candidates.length} 件</span><span class="pill">質問 ${answers.length} 回</span></div><div class="result-actions"><button class="answer primary" id="correct">正解！🎉</button><button class="answer" id="wrong">ちゃうで！</button></div><div class="list-wrap"><details><summary>残りの候補を見る（${candidates.length}件）</summary><div class="candidates">${sorted.map(x=>`<span class="candidate">${x.name}</span>`).join('')}</div></details></div><div class="controls"><button class="textbtn" id="undo">← ひとつ戻る</button><button class="textbtn" id="restart">もう一回遊ぶ ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button></div>`;document.getElementById('correct').onclick=()=>{game.innerHTML=`<div class="result-kicker">NICE GUESS!</div><div class="result-name">当たった！🎉</div><p class="result-sub">大阪の地元力、なかなかやな。${first?first.name:''}で正解！</p><button class="answer primary wide" id="again">もう一回遊ぶ ↻</button>`;document.getElementById('again').onclick=restart};document.getElementById('wrong').onclick=()=>renderCorrection();document.getElementById('undo').onclick=undo;document.getElementById('restart').onclick=restart;document.getElementById('feedback-archive').onclick=renderFeedbackArchive}
+function renderGuess(){let sorted=[...candidates].sort((x,y)=>mismatchCount(x)-mismatchCount(y));let first=sorted[0];currentGuessName=first?.name||'';game.innerHTML=`<div class="result-kicker">MY GUESS</div><h2>もしかして……</h2><div class="result-name">${first?first.name:'うーん、迷った！'}</div><p class="result-sub">${first?(first.type==='区'?first.region+'の区':first.region+'エリアの'+first.type):'回答をもう一度見直してみてな。'}${first&&mismatchCount(first)>0?'（回答と食い違う特徴が1つあるから、誤回答の可能性も考えてるで）':''}</p><div class="pills"><span class="pill">残り候補 ${candidates.length} 件</span><span class="pill">質問 ${answers.length} 回</span></div><div class="result-actions"><button class="answer primary" id="correct">正解！🎉</button><button class="answer" id="wrong">ちゃうで！</button></div><div class="list-wrap"><details><summary>残りの候補を見る（${candidates.length}件）</summary><div class="candidates">${sorted.map(x=>`<span class="candidate">${x.name}</span>`).join('')}</div></details></div><div class="controls"><button class="textbtn" id="undo">← ひとつ戻る</button><button class="textbtn" id="restart">もう一回遊ぶ ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button></div>`;document.getElementById('correct').onclick=()=>{game.innerHTML=`<div class="result-kicker">NICE GUESS!</div><div class="result-name">当たった！🎉</div><p class="result-sub">大阪の地元力、なかなかやな。${first?first.name:''}で正解！</p><button class="answer primary wide" id="again">もう一回遊ぶ ↻</button>`;document.getElementById('again').onclick=restart};document.getElementById('wrong').onclick=()=>{if(first)rejectedGuesses.add(first.name);asked.clear();render();};document.getElementById('undo').onclick=undo;document.getElementById('restart').onclick=restart;document.getElementById('feedback-archive').onclick=renderFeedbackArchive}
 const FEEDBACK_STORAGE_KEY='osakaGuessFeedbackV1';
 function loadFeedback(){
   try{const raw=localStorage.getItem(FEEDBACK_STORAGE_KEY);const data=raw?JSON.parse(raw):[];return Array.isArray(data)?data:[];}catch(e){return [];}
@@ -198,11 +198,11 @@ const sessionFeedback=loadFeedback();
 function saveFeedback(){try{localStorage.setItem(FEEDBACK_STORAGE_KEY,JSON.stringify(sessionFeedback));return true;}catch(e){return false;}}
 function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function answerLabel(a){return a==='yes'?'はい！':a==='no'?'ちゃうと思う':'わからん';}
-function renderCorrection(){game.innerHTML=`<div class="result-kicker">FEEDBACK</div><h2>正解はどこやった？</h2><p class="hint">正解を教えてくれたら、質問ごとの回答を照合して、予想が外れた理由を振り返れるで。改善メモはこのブラウザに保存するで。</p><div class="answers">${rows.map(x=>`<button class="answer" data-correct="${x.id}">${x.name}</button>`).join('')}</div><div class="controls"><button class="textbtn" id="backguess">← 予想に戻る</button><button class="textbtn" id="restart">最初から ↻</button></div>`;game.querySelectorAll('[data-correct]').forEach(b=>b.onclick=()=>{
+function renderCorrection(){game.innerHTML=`<div class="result-kicker">FEEDBACK</div><h2>正解はどこやった？</h2><p class="hint">正解を教えてくれたら、質問ごとの回答を照合して、予想が外れた理由を振り返れるで。改善メモはこのブラウザに保存するで。</p><div class="answers">${rows.map(x=>`<button class="answer" data-correct="${x.id}">${escapeHtml(displayName(x.name))}</button>`).join('')}</div><div class="controls"><button class="textbtn" id="backguess">← 予想に戻る</button><button class="textbtn" id="restart">最初から ↻</button></div>`;game.querySelectorAll('[data-correct]').forEach(b=>b.onclick=()=>{
   const target=rows.find(x=>x.id===Number(b.dataset.correct));
   if(!target)return;
   const details=answers.map(a=>{const q=questionDefs[a.i];const expected=safeQuestionValue(q,target);const mismatch=a.a!=='maybe'&&expected!==null&&expected!==(a.a==='yes');return {question:q[0],answer:a.a,expected:expected===null?'unknown':expected?'yes':'no',mismatch};});
-  const record={id:`${Date.now()}-${Math.random().toString(36).slice(2,8)}`,timestamp:new Date().toISOString(),guess:currentGuessName||candidates[0]?.name||'',correct:target.name,answers:details,mismatchCount:details.filter(d=>d.mismatch).length};
+  const record={id:`${Date.now()}-${Math.random().toString(36).slice(2,8)}`,timestamp:new Date().toISOString(),guess:currentGuessName||candidates[0]?.name||'',correct:displayName(target.name),correctKey:target.name,answers:details,mismatchCount:details.filter(d=>d.mismatch).length};
   sessionFeedback.push(record);
   const saved=saveFeedback();
   renderFeedbackResult(record,saved);
@@ -416,7 +416,7 @@ const provinceSets = {
  '摂津国':yesSet(['大阪市','豊中市','池田市','箕面市','吹田市','高槻市','茨木市','摂津市','島本町','守口市','枚方市','寝屋川市','門真市','大東市','交野市','四條畷市']),
  '河内国':yesSet(['東大阪市','八尾市','柏原市','松原市','羽曳野市','藤井寺市','太子町','河南町','千早赤阪村','富田林市','大阪狭山市','河内長野市','枚方市','交野市','寝屋川市','守口市','門真市','四條畷市','大東市'])
 };
-const lineNames = ['JR京都線','JR神戸線','JR大阪環状線','JR東西線','JR学研都市線','JR大和路線','JR阪和線','JRおおさか東線','JR関西空港線','阪急京都線','阪急宝塚線','阪急神戸線','阪急千里線','阪神本線','阪神なんば線','京阪本線','京阪交野線','近鉄奈良線','近鉄大阪線','近鉄南大阪線','近鉄長野線','南海本線','南海高野線','水間鉄道','大阪メトロ御堂筋線','大阪メトロ谷町線','大阪メトロ四つ橋線','大阪メトロ中央線','大阪メトロ千日前線','大阪メトロ堺筋線','大阪メトロ長堀鶴見緑地線','大阪メトロ今里筋線','大阪モノレール','北大阪急行線','泉北高速鉄道','阪堺電車'];
+const lineNames = ['JR京都線','JR神戸線','JR大阪環状線','JR東西線','JR学研都市線','JR大和路線','JR阪和線','JRおおさか東線','JR関西空港線','阪急京都線','阪急宝塚線','阪急神戸線','阪急千里線','阪神本線','阪神なんば線','京阪本線','京阪交野線','近鉄奈良線','近鉄大阪線','近鉄南大阪線','近鉄長野線','南海本線','南海高野線','水間鉄道','大阪メトロ御堂筋線','大阪メトロ谷町線','大阪メトロ四つ橋線','大阪メトロ中央線','大阪メトロ千日前線','大阪メトロ堺筋線','大阪メトロ長堀鶴見緑地線','大阪メトロ今里筋線','大阪モノレール','北大阪急行線','泉北高速鉄道','阪堺電車','ニュートラム（南港ポートタウン線）'];
 const roadNames = ['名神高速道路','新名神高速道路','中国自動車道','近畿自動車道','阪和自動車道','西名阪自動車道','関西空港自動車道','第二京阪道路','第二阪奈道路','南阪奈道路','堺泉北道路','阪神高速1号環状線','阪神高速3号神戸線','阪神高速4号湾岸線','阪神高速5号湾岸線','阪神高速6号大和川線','阪神高速11号池田線','阪神高速12号守口線','阪神高速13号東大阪線','阪神高速14号松原線','阪神高速15号堺線','阪神高速16号大阪港線','阪神高速17号西大阪線','箕面有料道路','第二阪和国道','国道1号','国道2号','国道25号','国道26号','国道43号','国道163号','国道165号','国道171号','国道170号','国道176号','国道308号','国道423号','国道479号','国道481号'];
 const linesByName = {
  '大阪市':['JR大阪環状線','JR京都線','JR神戸線','JR東西線','JR大和路線','JR阪和線','JRおおさか東線','阪急京都線','阪急宝塚線','阪急神戸線','阪急千里線','阪神本線','阪神なんば線','京阪本線','近鉄奈良線','南海本線','南海高野線','大阪メトロ御堂筋線','大阪メトロ谷町線','大阪メトロ四つ橋線','大阪メトロ中央線','大阪メトロ千日前線','大阪メトロ堺筋線','大阪メトロ長堀鶴見緑地線','大阪メトロ今里筋線','阪堺電車'],
@@ -425,8 +425,8 @@ const linesByName = {
  '吹田市':['JR京都線','阪急京都線','阪急千里線','大阪メトロ御堂筋線','大阪モノレール','北大阪急行線'],
  '高槻市':['JR京都線','阪急京都線'], '茨木市':['JR京都線','阪急京都線','大阪モノレール'], '摂津市':['JR京都線','阪急京都線','大阪モノレール'], '島本町':['JR京都線','阪急京都線'],
  '枚方市':['京阪本線','京阪交野線','JR学研都市線'],'交野市':['京阪交野線','JR学研都市線'],'寝屋川市':['京阪本線','JR学研都市線'],'守口市':['京阪本線','大阪メトロ谷町線'],'門真市':['京阪本線','大阪モノレール','大阪メトロ長堀鶴見緑地線'],'四條畷市':['JR学研都市線'],'大東市':['JR学研都市線'],
- '東大阪市':['近鉄奈良線','近鉄大阪線','JR学研都市線','JRおおさか東線','大阪メトロ中央線'],'八尾市':['JR大和路線','近鉄大阪線'],'柏原市':['JR大和路線','近鉄大阪線'],
- '泉大津市':['南海本線'],'和泉市':['JR阪和線','泉北高速鉄道'],'高石市':['南海本線','JR阪和線'],'忠岡町':['南海本線'],'岸和田市':['南海本線','JR阪和線'],'貝塚市':['南海本線','水間鉄道'],'熊取町':['JR阪和線'],'泉佐野市':['南海本線','JR阪和線','JR関西空港線'],'田尻町':['南海本線','JR関西空港線'],'泉南市':['南海本線','JR阪和線'],'阪南市':['南海本線','JR阪和線'],'岬町':['南海本線'],
+ '東大阪市':['近鉄奈良線','近鉄大阪線','JRおおさか東線','大阪メトロ中央線'],'八尾市':['JR大和路線','近鉄大阪線'],'柏原市':['JR大和路線','近鉄大阪線'],
+ '泉大津市':['南海本線'],'和泉市':['JR阪和線','泉北高速鉄道'],'高石市':['南海本線','JR阪和線'],'忠岡町':['南海本線'],'岸和田市':['南海本線','JR阪和線'],'貝塚市':['南海本線','水間鉄道'],'熊取町':['JR阪和線'],'泉佐野市':['南海本線','JR阪和線','JR関西空港線'],'田尻町':['南海本線'],'泉南市':['南海本線','JR阪和線'],'阪南市':['南海本線','JR阪和線'],'岬町':['南海本線'],
  '松原市':['近鉄南大阪線'],'羽曳野市':['近鉄南大阪線'],'藤井寺市':['近鉄南大阪線'],'太子町':[],'河南町':[],'千早赤阪村':[],'富田林市':['近鉄長野線'],'大阪狭山市':['南海高野線'],'河内長野市':['南海高野線','近鉄長野線']
 };
 const reading = {'大阪市':'おおさかし','堺市':'さかいし','豊中市':'とよなかし','池田市':'いけだし','箕面市':'みのおし','豊能町':'とよのちょう','能勢町':'のせちょう','吹田市':'すいたし','高槻市':'たかつきし','茨木市':'いばらきし','摂津市':'せっつし','島本町':'しまもとちょう','枚方市':'ひらかたし','交野市':'かたのし','寝屋川市':'ねやがわし','守口市':'もりぐちし','門真市':'かどまし','四條畷市':'しじょうなわてし','大東市':'だいとうし','東大阪市':'ひがしおおさかし','八尾市':'やおし','柏原市':'かしわらし','泉大津市':'いずみおおつし','和泉市':'いずみし','高石市':'たかいしし','忠岡町':'ただおかちょう','岸和田市':'きしわだし','貝塚市':'かいづかし','熊取町':'くまとりちょう','泉佐野市':'いずみさのし','田尻町':'たじりちょう','泉南市':'せんなんし','阪南市':'はんなんし','岬町':'みさきちょう','松原市':'まつばらし','羽曳野市':'はびきのし','藤井寺市':'ふじいでらし','太子町':'たいしちょう','河南町':'かなんちょう','千早赤阪村':'ちはやあかさかむら','富田林市':'とんだばやしし','大阪狭山市':'おおさかさやまし','河内長野市':'かわちながのし'};
@@ -434,7 +434,7 @@ const threeLines = yesSet(['大阪市','堺市','豊中市','箕面市','吹田�
 // 行政区は正式な読みを持たせ、ひらがな検索・文字数質問でも区名を正しく扱う。
 Object.assign(reading,{'北区（大阪市）':'きたく','都島区':'みやこじまく','福島区':'ふくしまく','此花区':'このはなく','中央区（大阪市）':'ちゅうおうく','西区（大阪市）':'にしく','港区（大阪市）':'みなとく','大正区':'たいしょうく','天王寺区':'てんのうじく','浪速区':'なにわく','西淀川区':'にしよどがわく','淀川区':'よどがわく','東淀川区':'ひがしよどがわく','東成区':'ひがしなりく','生野区':'いくのく','旭区（大阪市）':'あさひく','城東区':'じょうとうく','鶴見区（大阪市）':'つるみく','阿倍野区':'あべのく','住吉区':'すみよしく','東住吉区':'ひがしすみよしく','平野区':'ひらのく','西成区':'にしなりく','住之江区':'すみのえく','堺区':'さかいく','中区（堺市）':'なかく','東区（堺市）':'ひがしく','西区（堺市）':'にしく','南区（堺市）':'みなみく','北区（堺市）':'きたく','美原区':'みはらく'});
 mallSet.add('北区（堺市）');
-Object.assign(linesByName,{'北区（大阪市）':['JR大阪環状線','JR東西線','阪急京都線','阪急宝塚線','阪急神戸線','大阪メトロ御堂筋線','大阪メトロ谷町線','大阪メトロ堺筋線'],'都島区':['JR大阪環状線','JR東西線','京阪本線','大阪メトロ谷町線'],'福島区':['JR大阪環状線','JR東西線','阪神本線'],'此花区':['JR大阪環状線'],'中央区（大阪市）':['JR大阪環状線','近鉄奈良線','大阪メトロ御堂筋線','大阪メトロ谷町線','大阪メトロ中央線','大阪メトロ堺筋線'],'西区（大阪市）':['大阪メトロ御堂筋線','大阪メトロ四つ橋線','大阪メトロ中央線','大阪メトロ千日前線'],'港区（大阪市）':['JR大阪環状線','大阪メトロ中央線'],'大正区':['JR大阪環状線','大阪メトロ長堀鶴見緑地線'],'天王寺区':['JR大阪環状線','JR大和路線','近鉄奈良線','近鉄大阪線','大阪メトロ御堂筋線','大阪メトロ谷町線'],'浪速区':['JR大阪環状線','JR大和路線','南海本線','南海高野線','大阪メトロ御堂筋線','大阪メトロ四つ橋線','大阪メトロ千日前線'],'西淀川区':['JR神戸線','JR東西線','阪神本線'],'淀川区':['JR京都線','JR神戸線','JR東海道線','阪急京都線','阪急宝塚線','阪急神戸線','大阪メトロ御堂筋線'],'東淀川区':['JR京都線','阪急京都線','阪急千里線'],'東成区':['大阪メトロ中央線','大阪メトロ千日前線','大阪メトロ今里筋線'],'生野区':['JR大阪環状線','近鉄奈良線','近鉄大阪線','大阪メトロ千日前線'],'旭区（大阪市）':['京阪本線','大阪メトロ谷町線','大阪メトロ今里筋線'],'城東区':['JR大阪環状線','JR学研都市線','JRおおさか東線','京阪本線','大阪メトロ長堀鶴見緑地線','大阪メトロ今里筋線'],'鶴見区（大阪市）':['JR学研都市線','大阪メトロ長堀鶴見緑地線'],'阿倍野区':['JR阪和線','近鉄南大阪線','大阪メトロ御堂筋線','大阪メトロ谷町線'],'住吉区':['JR阪和線','南海本線','南海高野線'],'東住吉区':['JR大和路線','近鉄南大阪線','大阪メトロ谷町線'],'平野区':['JR大和路線','大阪メトロ谷町線'],'西成区':['JR大阪環状線','南海本線','南海高野線','大阪メトロ御堂筋線','大阪メトロ四つ橋線','大阪メトロ堺筋線'],'住之江区':['南海本線','南海高野線','大阪メトロ四つ橋線'],'堺区':['JR阪和線','南海本線','南海高野線','阪堺電車'],'中区（堺市）':['泉北高速鉄道'],'東区（堺市）':['南海高野線'],'西区（堺市）':['JR阪和線','南海本線','南海高野線','阪堺電車'],'南区（堺市）':['泉北高速鉄道'],'北区（堺市）':['大阪メトロ御堂筋線','南海高野線']});
+Object.assign(linesByName,{'北区（大阪市）':['JR大阪環状線','JR京都線','JR神戸線','JR東西線','阪急京都線','阪急宝塚線','阪急神戸線','大阪メトロ御堂筋線','大阪メトロ谷町線','大阪メトロ堺筋線'],'都島区':['JR大阪環状線','JR東西線','京阪本線','大阪メトロ谷町線'],'福島区':['JR大阪環状線','JR東西線','阪神本線'],'此花区':['JR大阪環状線'],'中央区（大阪市）':['JR大阪環状線','近鉄奈良線','大阪メトロ御堂筋線','大阪メトロ谷町線','大阪メトロ中央線','大阪メトロ堺筋線'],'西区（大阪市）':['大阪メトロ御堂筋線','大阪メトロ四つ橋線','大阪メトロ中央線','大阪メトロ千日前線'],'港区（大阪市）':['JR大阪環状線','大阪メトロ中央線'],'大正区':['JR大阪環状線','大阪メトロ長堀鶴見緑地線'],'天王寺区':['JR大阪環状線','JR大和路線','近鉄奈良線','近鉄大阪線','大阪メトロ御堂筋線','大阪メトロ谷町線'],'浪速区':['JR大阪環状線','JR大和路線','南海本線','南海高野線','大阪メトロ御堂筋線','大阪メトロ四つ橋線','大阪メトロ千日前線'],'西淀川区':['JR神戸線','JR東西線','阪神本線'],'淀川区':['JR京都線','JR神戸線','JR東海道線','阪急京都線','阪急宝塚線','阪急神戸線','大阪メトロ御堂筋線'],'東淀川区':['JR京都線','阪急京都線','阪急千里線'],'東成区':['大阪メトロ中央線','大阪メトロ千日前線','大阪メトロ今里筋線'],'生野区':['JR大阪環状線','近鉄奈良線','近鉄大阪線','大阪メトロ千日前線'],'旭区（大阪市）':['京阪本線','大阪メトロ谷町線','大阪メトロ今里筋線'],'城東区':['JR大阪環状線','JR学研都市線','JRおおさか東線','京阪本線','大阪メトロ長堀鶴見緑地線','大阪メトロ今里筋線'],'鶴見区（大阪市）':['JR学研都市線','大阪メトロ長堀鶴見緑地線'],'阿倍野区':['JR阪和線','近鉄南大阪線','大阪メトロ御堂筋線','大阪メトロ谷町線'],'住吉区':['JR阪和線','南海本線','南海高野線'],'東住吉区':['JR大和路線','近鉄南大阪線','大阪メトロ谷町線'],'平野区':['JR大和路線','大阪メトロ谷町線'],'西成区':['JR大阪環状線','南海本線','南海高野線','大阪メトロ御堂筋線','大阪メトロ四つ橋線','大阪メトロ堺筋線'],'住之江区':['南海本線','大阪メトロ四つ橋線','ニュートラム（南港ポートタウン線）'],'堺区':['JR阪和線','南海本線','南海高野線','阪堺電車'],'中区（堺市）':['泉北高速鉄道'],'東区（堺市）':['南海高野線'],'西区（堺市）':['JR阪和線','南海本線','南海高野線','阪堺電車'],'南区（堺市）':['泉北高速鉄道'],'北区（堺市）':['大阪メトロ御堂筋線','南海高野線']});
 const roadsByName = {
 '大阪市':['阪神高速1号環状線','阪神高速3号神戸線','阪神高速4号湾岸線','阪神高速5号湾岸線','阪神高速6号大和川線','阪神高速11号池田線','阪神高速12号守口線','阪神高速13号東大阪線','阪神高速14号松原線','阪神高速15号堺線','阪神高速16号大阪港線','阪神高速17号西大阪線','近畿自動車道','国道1号','国道2号','国道25号','国道26号','国道43号','国道163号'],
 '堺市':['阪和自動車道','堺泉北道路','阪神高速4号湾岸線','阪神高速6号大和川線','阪神高速15号堺線','国道26号','国道170号'],
@@ -489,6 +489,18 @@ questionDefs.push(
  ['食べ物・名産が有名？（地名を含む名称以外）',x=>(profiles[x.name]?.food||[]).some(f=>!f.includes(x.name.replace(/[市町村区]/g,'')))],
  ['スーパー・エバグリーンがある？',x=>evergreenSet.has(x.name)],['警察署が存在しない？',x=>noPoliceSet.has(x.name)]
 );
+// 路線を単独で尋ねるだけでなく、複数路線の組み合わせでも絞り込む。
+const railwayPairs=[
+ ['南海本線','JR阪和線'],['JR京都線','阪急京都線'],['京阪本線','大阪メトロ谷町線'],
+ ['近鉄大阪線','JR大和路線'],['JR学研都市線','京阪交野線'],['大阪モノレール','阪急京都線'],
+ ['南海高野線','泉北高速鉄道'],['大阪メトロ御堂筋線','南海高野線'],
+ ['JR大阪環状線','大阪メトロ谷町線'],['近鉄南大阪線','大阪メトロ谷町線'],
+ ['JR阪和線','南海高野線'],['南海本線','阪堺電車']
+];
+railwayPairs.forEach(([a,b])=>questionDefs.push([
+ `「${a}」と「${b}」の両方が通っている？`,
+ x=>{const lines=linesByName[x.name]||[];return lines.includes(a)&&lines.includes(b);}
+]));
 // 名物は「食べ物・名産が有名？」の一括判定ではなく、地域ごとの実在する品目を個別に照合する。
 // 大阪府・JA大阪中央会などが紹介する特産品／伝統野菜を中心に、複数地域で知られるものは該当地域をまとめて登録。
 const localFoodAreas = {
@@ -535,36 +547,135 @@ const localFoodAreas = {
 };
 questionDefs.splice(0,questionDefs.length,...questionDefs.filter(q=>q[0]!=='食べ物・名産が有名？（地名を含む名称以外）'));
 Object.entries(localFoodAreas).forEach(([food,names])=>questionDefs.push([`この地域の名物に「${food}」がある？`,x=>names.includes(x.name)||(names.includes('大阪市')&&x.region==='大阪市')||(names.includes('堺市')&&x.region==='堺市')]));
+// 名産の範囲を個別品目だけでなく、広いジャンルでも判定する。
+// 複数の品目・ジャンルが同じ地域に該当するときは、そのどれか／両方という質問も出題する。
+const foodGenrePatterns={
+ '野菜・伝統野菜':/胡瓜|越瓜|南瓜|しろな|天満菜|人参|慈姑|茄子|なす|大根|れんこん|ごぼう|独活|真菜|ふき|きゃべつ|たまねぎ|さといも|えだまめ|たけのこ|野菜|農産物/,
+ '果物・果樹':/ぶどう|葡萄|みかん|いちじく|もも|桃|栗|果物|果樹/,
+ '魚介・海産物':/しらす|牡蠣|海産物|魚介|海鮮/,
+ '郷土料理・ご当地グルメ':/たこ焼き|お好み焼き|うどんギョーザ|天ぷら|串カツ|沖縄料理|韓国料理|グルメ|飲食店|きつねうどん/,
+ '菓子・加工食品':/和菓子|チキンラーメン|凍豆腐|ワイン|天ぷら|お好み焼き|たこ焼き/,
+ '工芸・地場産業':/刃物|毛布|タオル|つまようじ|繊維|ものづくり|地場産品|地元農産物/,
+ '米・穀物':/棚田米|米|農産物/,
+ '農産物全般':/野菜|農産物|胡瓜|越瓜|南瓜|しろな|天満菜|人参|慈姑|茄子|なす|大根|れんこん|ごぼう|独活|真菜|ふき|きゃべつ|たまねぎ|さといも|えだまめ|たけのこ|ぶどう|葡萄|みかん|いちじく|もも|桃|栗|果物|果樹|棚田米|米/
+};
+function foodAreaMatches(x,names){return names.includes(x.name)||(names.includes('大阪市')&&x.region==='大阪市')||(names.includes('堺市')&&x.region==='堺市');}
+function hasFoodGenre(x,genre){
+ const pattern=foodGenrePatterns[genre];if(!pattern)return false;
+ return Object.entries(localFoodAreas).some(([food,names])=>pattern.test(food)&&foodAreaMatches(x,names));
+}
+Object.keys(foodGenrePatterns).forEach(genre=>questionDefs.push([`名産に「${genre}」がある？`,x=>hasFoodGenre(x,genre)]));
+questionDefs.push(
+ ['名産に野菜・果物のどちらかがある？',x=>hasFoodGenre(x,'野菜・伝統野菜')||hasFoodGenre(x,'果物・果樹')],
+ ['名産に農産物系と郷土料理・加工食品系の両方がある？',x=>(hasFoodGenre(x,'農産物全般')||hasFoodGenre(x,'果物・果樹'))&&(hasFoodGenre(x,'郷土料理・ご当地グルメ')||hasFoodGenre(x,'菓子・加工食品'))],
+ ['名産に農産物系か工芸・地場産業系のどちらかがある？',x=>hasFoodGenre(x,'農産物全般')||hasFoodGenre(x,'工芸・地場産業')],
+ ['名産に魚介・海産物と農産物の両方がある？',x=>hasFoodGenre(x,'魚介・海産物')&&hasFoodGenre(x,'農産物全般')]
+);
 // 同じ質問文が重複しないように最初の1件だけ残す。
 const seenQuestionText=new Set();
 questionDefs.splice(0,questionDefs.length,...questionDefs.filter(q=>{if(seenQuestionText.has(q[0]))return false;seenQuestionText.add(q[0]);return true;}));
-const originalChooseQuestion=chooseQuestion;
-chooseQuestion=function(){
- const scored=[];
- questionDefs.forEach((q,i)=>{
-  if(asked.has(i))return;
-  let knownCount=0,yes=0;
-  for(const x of candidates){const value=safeQuestionValue(q,x);if(value!==null){knownCount++;if(value===true)yes++;}}
-  const no=knownCount-yes;
-  if(!yes||!no||!knownCount)return;
-  const balance=1-Math.abs(yes-no)/knownCount;
-  const coverage=knownCount/Math.max(1,candidates.length);
-  const isOfficialRegion=/大阪府の「.*地域」にあたる？/.test(q[0]);
+// 回答ミスや未登録データがあっても正解候補を永久に消さない、重み付き推理方式。
+// 一致する特徴を重視する一方、2〜3問の誤回答があっても全自治体を再評価する。
+function displayName(name){
+ const aliases={
+  '北区（大阪市）':'大阪市北区','中央区（大阪市）':'大阪市中央区','西区（大阪市）':'大阪市西区',
+  '港区（大阪市）':'大阪市港区','旭区（大阪市）':'大阪市旭区','鶴見区（大阪市）':'大阪市鶴見区',
+  '北区（堺市）':'堺市北区','中区（堺市）':'堺市中区','東区（堺市）':'堺市東区',
+  '西区（堺市）':'堺市西区','南区（堺市）':'堺市南区'
+ };
+ return aliases[name]||name;
+}
+function mismatchCount(x){
+ let n=0;
+ for(const a of answers){
+  if(a.a==='maybe')continue;
+  const q=questionDefs[a.i];
+  if(!q)continue;
+  const value=safeQuestionValue(q,x);
+  if(value!==null&&value!==(a.a==='yes'))n++;
+ }
+ return n;
+}
+function candidateWeight(x){
+ // 1つの矛盾で候補から消さず、少しずつ重みを下げる。
+ return Math.pow(0.68,mismatchCount(x));
+}
+function plausibleCandidates(){
+ const ranked=[...rows].filter(x=>!rejectedGuesses.has(x.name)).sort((a,b)=>candidateWeight(b)-candidateWeight(a)||mismatchCount(a)-mismatchCount(b));
+ if(!ranked.length)return [];
+ const best=mismatchCount(ranked[0]);
+ const tolerance=Math.max(2,Math.min(4,Math.floor(answers.filter(a=>a.a!=='maybe').length/4)+2));
+ const plausible=ranked.filter(x=>mismatchCount(x)<=best+tolerance);
+ return plausible.length?plausible:ranked.slice(0,12);
+}
+function chooseQuestion(allowRepeat=false){
+ let best=null,bestScore=-1;
+ const answeredCount=answers.filter(a=>a.a!=='maybe').length;
+ for(let i=0;i<questionDefs.length;i++){
+  if(asked.has(i))continue;
+  if(!allowRepeat&&answers.some(a=>a.i===i))continue;
+  const q=questionDefs[i];
+  const activeRows=rows.filter(x=>!rejectedGuesses.has(x.name));
+  let yes=0,no=0,known=0;
+  for(const x of activeRows){
+   const v=safeQuestionValue(q,x);
+   if(v===null)continue;
+   const w=candidateWeight(x);
+   known+=w;
+   if(v)yes+=w;else no+=w;
+  }
+  if(!yes||!no||!known)continue;
+  const balance=1-Math.abs(yes-no)/known;
+  const coverage=known/Math.max(1,activeRows.reduce((sum,x)=>sum+candidateWeight(x),0));
   let score=balance*coverage;
-  // 交通のヒントを優先し、一級河川だけが連続して選ばれるのを防ぐ。
-  if(/鉄道|路線|「.*」が通っている|国道|高速道路|第二阪和|第二京阪|阪神高速|箕面有料道路/.test(q[0]))score+=0.20;
-  if(/一級河川/.test(q[0]))score-=0.30;
-  if(answers.length>0&&/一級河川/.test(answers[answers.length-1]&&questionDefs[answers[answers.length-1].i]?.[0]||''))score-=0.20;
-  if(candidates.length>12&&isOfficialRegion)score+=0.12;
-  // 同点・僅差の質問が毎回先頭に偏らないよう、選択に小さなランダム補正を加える。
-  score+=Math.random()*0.22;
-  scored.push({i,q,score});
- });
- if(!scored.length)return null;
- scored.sort((a,b)=>b.score-a.score);
- return scored[0];
-};
-function restart(){candidates=[...rows];answers=[];asked=new Set();render()}
+  const text=q[0];
+  if(/鉄道|路線|「.*」が通っている|ニュートラム|阪急|阪神|南海|近鉄|京阪|JR|地下鉄|モノレール/.test(text))score+=0.20;
+  if(/名産|農産物|野菜|果物|魚介|海産物|郷土料理|ご当地グルメ|加工食品|工芸|地場産業/.test(text))score+=0.16;
+  if(/鉄道路線は3本以上/.test(text))score-=0.05;
+  if(/一級河川/.test(text))score-=0.18;
+  if(answeredCount>0&&/一級河川/.test(questionDefs[answers[answers.length-1]?.i]?.[0]||''))score-=0.12;
+  // 道路・高速道路の質問は補助情報扱いにし、鉄道・名産・地域特徴を先に尋ねる。
+  const isRoadQuestion = roadNames.some(road=>text===`「${road}」が通っている？`) || /高速道路JCT|サービスエリア・パーキングエリア/.test(text);
+  if(isRoadQuestion) {
+    score -= 0.38;
+    const recentRoads = answers.slice(-3).filter(a=>{
+      const oldText=questionDefs[a.i]?.[0]||'';
+      return roadNames.some(road=>oldText===`「${road}」が通っている？`) || /高速道路JCT|サービスエリア・パーキングエリア/.test(oldText);
+    }).length;
+    if(recentRoads>=1)score-=0.22;
+    if(recentRoads>=2)score-=0.35;
+  }
+  // 近い候補同士を区別できる鉄道路線の質問を優先。ただし道路質問の頻度は抑える。
+  if(/「(JR|阪急|阪神|京阪|近鉄|南海|大阪メトロ|大阪モノレール|北大阪急行|泉北高速鉄道|水間鉄道|阪堺電車|ニュートラム).*」が通っている？/.test(text))score+=0.08;
+  if(answeredCount>=8&&score<0.075)continue;
+  if(score>bestScore){bestScore=score;best={i,q};}
+ }
+ return best;
+}
+// 過去の候補リストで正解を永久除外しない。毎回74自治体すべてを再採点する。
+function answer(i,a){
+ asked.add(i);
+ // 同じ質問を再確認した場合は、古い回答を残さず最新の回答で置き換える。
+ answers=answers.filter(old=>old.i!==i);
+ answers.push({i,a,prev:[...candidates]});
+ candidates=[...rows];
+ render();
+}
+function renderGuess(){
+ const sorted=[...rows].filter(x=>!rejectedGuesses.has(x.name)).sort((a,b)=>candidateWeight(b)-candidateWeight(a)||mismatchCount(a)-mismatchCount(b));
+ const first=sorted[0];
+ currentGuessName=first?.name||'';
+ const plausible=plausibleCandidates();
+ const shown=sorted.slice(0,20);
+ game.innerHTML=`<div class="result-kicker">MY GUESS</div><h2>もしかして……</h2><div class="result-name">${first?displayName(first.name):'うーん、迷った！'}</div><p class="result-sub">${first?(first.type==='区'?first.region+'の区':first.region+'エリアの'+first.type):'回答をもう一度見直してみてな。'}${first&&mismatchCount(first)>0?'（登録データと食い違う回答があるけど、誤回答の可能性も含めて推理してるで）':''}</p><div class="pills"><span class="pill">有力候補 ${plausible.length} 件</span><span class="pill">質問 ${answers.length} 回</span><span class="pill">最有力の不一致 ${first?mismatchCount(first):0} 件</span></div><div class="result-actions"><button class="answer primary" id="correct">正解！🎉</button><button class="answer" id="wrong">ちゃうで！</button></div><div class="list-wrap"><details><summary>有力候補を見る（上位20件）</summary><div class="candidates">${shown.map(x=>`<span class="candidate">${escapeHtml(displayName(x.name))}（不一致${mismatchCount(x)}）</span>`).join('')}</div></details></div><div class="controls"><button class="textbtn" id="undo">← ひとつ戻る</button><button class="textbtn" id="restart">もう一回遊ぶ ↻</button><button class="textbtn" id="feedback-archive">改善メモ・集計</button><button class="textbtn" id="tell-answer">正解を教えて記録</button></div>`;
+ document.getElementById('correct').onclick=()=>{game.innerHTML=`<div class="result-kicker">NICE GUESS!</div><div class="result-name">当たった！🎉</div><p class="result-sub">大阪の地元力、なかなかやな。${escapeHtml(displayName(first?.name||''))}で正解！</p><button class="answer primary wide" id="again">もう一回遊ぶ ↻</button>`;document.getElementById('again').onclick=restart};
+ document.getElementById('wrong').onclick=()=>{if(first)rejectedGuesses.add(first.name);asked.clear();render();};
+ document.getElementById('undo').onclick=undo;
+ document.getElementById('restart').onclick=restart;
+ document.getElementById('feedback-archive').onclick=renderFeedbackArchive;
+ document.getElementById('tell-answer').onclick=renderCorrection;
+}
+function restart(){candidates=[...rows];answers=[];asked=new Set();rejectedGuesses=new Set();currentGuessName='';render()}
 document.title='大阪どこやねん？｜市区町村アキネイター';
 try{
   render();
